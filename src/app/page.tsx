@@ -239,6 +239,9 @@ export default function Home() {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [configurationReady, setConfigurationReady] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [inputSource, setInputSource] = useState<"file" | "paste">("file");
+  const [pastedText, setPastedText] = useState("");
+  const [pastedFormat, setPastedFormat] = useState<"txt" | "csv">("txt");
   const [matches, setMatches] = useState<TrackMatch[]>([]);
   const [selectedTracks, setSelectedTracks] = useState<Record<number, boolean>>({});
   const [selectedCandidates, setSelectedCandidates] = useState<Record<number, string>>({});
@@ -674,13 +677,15 @@ export default function Home() {
 
   async function resolveTracks(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setError("");
-    setNotice("");
-    setImportResult(null);
-    setPlaylistUpdateResult(null);
+    clearImportResults();
 
-    if (!file) {
+    if (inputSource === "file" && !file) {
       setError("צריך לבחור קובץ לפני חיפוש השירים.");
+      return;
+    }
+
+    if (inputSource === "paste" && !pastedText.trim()) {
+      setError("צריך להדביק רשימת שירים לפני החיפוש.");
       return;
     }
 
@@ -693,7 +698,11 @@ export default function Home() {
 
     try {
       const formData = new FormData();
-      formData.append("file", file);
+      if (inputSource === "paste") {
+        formData.append("file", new File([pastedText], `songs.${pastedFormat}`, { type: "text/plain" }));
+      } else if (file) {
+        formData.append("file", file);
+      }
       const response = await fetch("/api/spotify/resolve", {
         method: "POST",
         body: formData,
@@ -835,6 +844,16 @@ export default function Home() {
     });
   }
 
+  function clearImportResults() {
+    setMatches([]);
+    setSelectedTracks({});
+    setSelectedCandidates({});
+    setImportResult(null);
+    setPlaylistUpdateResult(null);
+    setError("");
+    setNotice("");
+  }
+
   function selectFile(nextFile: File | null) {
     setFile(nextFile);
     if (nextFile) {
@@ -849,15 +868,11 @@ export default function Home() {
         suggestedPlaylistName.current = suggestion;
       }
     }
-    setMatches([]);
-    setSelectedTracks({});
-    setSelectedCandidates({});
-    setImportResult(null);
-    setPlaylistUpdateResult(null);
-    setError("");
+    clearImportResults();
   }
 
   const hasMorePlaylists = playlistOffset < playlistTotal;
+  const hasInput = inputSource === "file" ? Boolean(file) : Boolean(pastedText.trim());
 
   return (
     <main className="page-shell">
@@ -874,7 +889,7 @@ export default function Home() {
           <span className="eyebrow"><span className="live-dot" /> SPOTIFY PLAYLIST IMPORTER</span>
           <h1>הרשימה שלך.<br /><span>הפלייליסט שלך.</span></h1>
           <p>
-            טוענים קובץ שירים, בודקים את ההתאמות, ובאישור אחד מעבירים אותם
+            טוענים קובץ או מדביקים רשימת שירים, בודקים את ההתאמות, ובאישור אחד מעבירים אותם
             ל-Spotify.
           </p>
         </div>
@@ -906,33 +921,99 @@ export default function Home() {
             <div className="step-heading">
               <span className="step-number">01</span>
               <div>
-                <h3>בחירת קובץ</h3>
-                <p>Excel, CSV או TXT — עד 1,000 שירים</p>
+                <h3>בחירת שירים</h3>
+                <p>קובץ או רשימה מודבקת — עד 1,000 שירים</p>
               </div>
             </div>
 
             <form onSubmit={resolveTracks}>
-              <label
-                className="file-drop"
-                htmlFor="song-file"
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  selectFile(event.dataTransfer.files[0] ?? null);
-                }}
-              >
-                <span className="upload-icon" aria-hidden="true">↑</span>
-                <strong>{file ? file.name : "בוחרים קובץ או גוררים לכאן"}</strong>
-                <span>{file ? "אפשר לבחור קובץ אחר" : "XLSX, CSV או TXT · עד 10 MB"}</span>
-                <input
-                  id="song-file"
-                  type="file"
-                  accept=".xlsx,.csv,.txt"
-                  onChange={(event) => {
-                    selectFile(event.target.files?.[0] ?? null);
+              <fieldset className="source-options" disabled={resolving}>
+                <legend>מקור השירים</legend>
+                <label>
+                  <input
+                    type="radio"
+                    name="input-source"
+                    checked={inputSource === "file"}
+                    onChange={() => {
+                      setInputSource("file");
+                      clearImportResults();
+                    }}
+                  />
+                  טעינת קובץ
+                </label>
+                <label>
+                  <input
+                    type="radio"
+                    name="input-source"
+                    checked={inputSource === "paste"}
+                    onChange={() => {
+                      setInputSource("paste");
+                      clearImportResults();
+                    }}
+                  />
+                  הדבקת רשימה
+                </label>
+              </fieldset>
+
+              {inputSource === "file" ? (
+                <label
+                  className="file-drop"
+                  htmlFor="song-file"
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (!resolving) selectFile(event.dataTransfer.files[0] ?? null);
                   }}
-                />
-              </label>
+                >
+                  <span className="upload-icon" aria-hidden="true">↑</span>
+                  <strong>{file ? file.name : "בוחרים קובץ או גוררים לכאן"}</strong>
+                  <span>{file ? "אפשר לבחור קובץ אחר" : "XLSX, CSV או TXT · עד 10 MB"}</span>
+                  <input
+                    id="song-file"
+                    type="file"
+                    accept=".xlsx,.csv,.txt"
+                    disabled={resolving}
+                    onChange={(event) => {
+                      selectFile(event.target.files?.[0] ?? null);
+                    }}
+                  />
+                </label>
+              ) : (
+                <div className="paste-input">
+                  <label className="field-label" htmlFor="paste-format">
+                    פורמט הרשימה
+                    <select
+                      id="paste-format"
+                      className="text-input"
+                      value={pastedFormat}
+                      disabled={resolving}
+                      onChange={(event) => {
+                        setPastedFormat(event.target.value === "csv" ? "csv" : "txt");
+                        clearImportResults();
+                      }}
+                    >
+                      <option value="txt">טקסט: Artist - Track</option>
+                      <option value="csv">CSV: Artist,Track</option>
+                    </select>
+                  </label>
+                  <label className="field-label" htmlFor="pasted-songs">
+                    הדביקו כאן את רשימת השירים
+                    <textarea
+                      id="pasted-songs"
+                      className="text-input"
+                      rows={8}
+                      dir="auto"
+                      placeholder={pastedFormat === "txt" ? "Artist - Track" : "Artist,Track"}
+                      value={pastedText}
+                      disabled={resolving}
+                      onChange={(event) => {
+                        setPastedText(event.target.value);
+                        clearImportResults();
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
 
               <div className="format-hint">
                 <span className="format-tag">XLSX / CSV</span>
@@ -947,19 +1028,19 @@ export default function Home() {
                 <label htmlFor="song-file-prompt">איך יוצרים קובץ שירים?</label>
                 <p>
                   העתיקו את הפרומפט לכלי AI, הוסיפו את בקשתכם, והדביקו את התוצאה
-                  בפנקס הרשימות. שמרו כקובץ TXT בקידוד UTF-8 ובחרו אותו למעלה.
+                  בתיבת ההדבקה למעלה, או בפנקס הרשימות ושמרו כקובץ TXT בקידוד UTF-8.
                 </p>
                 <textarea
                   id="song-file-prompt"
                   readOnly
-                  rows={6}
+                  rows={16}
                   dir="auto"
                   value={"צור רשימת שירים כטקסט פשוט, ללא כותרת או הסברים. כל שורה תכיל שם אמן ושם שיר, מופרדים ברווח, מקף ורווח, כך:\nArcade Fire - The Suburbs\nFoo Fighters - Everlong\nודא ששמות האמנים והשירים מדויקים ואל תוסיף כפילויות.\nהבקשה שלי: [כתבו כאן אילו שירים או אמנים לכלול]"}
                 />
               </div>
 
               {connected ? (
-                <button className="button button-primary full-button" type="submit" disabled={resolving || !file}>
+                <button className="button button-primary full-button" type="submit" disabled={resolving || !hasInput}>
                   {resolving ? <><span className="spinner" /> מחפשים התאמות...</> : "חיפוש שירים ב-Spotify"}
                 </button>
               ) : configurationReady ? (
@@ -982,7 +1063,7 @@ export default function Home() {
 
             <div className="privacy-note">
               <span aria-hidden="true">⌑</span>
-              הקובץ מעובד לצורך הייבוא ואינו נשמר באפליקציה.
+              הקובץ או הרשימה מעובדים לצורך הייבוא ואינם נשמרים באפליקציה.
             </div>
           </article>
 
