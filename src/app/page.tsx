@@ -267,6 +267,7 @@ export default function Home() {
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [playlistUpdateResult, setPlaylistUpdateResult] = useState<PlaylistUpdateResult | null>(null);
   const nextTrackKey = useRef(0);
+  const suggestedPlaylistName = useRef("");
 
   const matchedCount = useMemo(
     () => matches.filter((item) => item.status === "matched").length,
@@ -836,6 +837,18 @@ export default function Home() {
 
   function selectFile(nextFile: File | null) {
     setFile(nextFile);
+    if (nextFile) {
+      const suggestion = nextFile.name
+        .replace(/\.(xlsx|csv|txt)$/i, "")
+        .replace(/[-_]+/g, " ")
+        .trim()
+        .slice(0, 100);
+
+      if (suggestion && (!playlistName.trim() || playlistName === suggestedPlaylistName.current)) {
+        setPlaylistName(suggestion);
+        suggestedPlaylistName.current = suggestion;
+      }
+    }
     setMatches([]);
     setSelectedTracks({});
     setSelectedCandidates({});
@@ -930,6 +943,21 @@ export default function Home() {
                 <span>שורה לכל שיר: Artist - Track</span>
               </div>
 
+              <div className="file-guide">
+                <label htmlFor="song-file-prompt">איך יוצרים קובץ שירים?</label>
+                <p>
+                  העתיקו את הפרומפט לכלי AI, הוסיפו את בקשתכם, והדביקו את התוצאה
+                  בפנקס הרשימות. שמרו כקובץ TXT בקידוד UTF-8 ובחרו אותו למעלה.
+                </p>
+                <textarea
+                  id="song-file-prompt"
+                  readOnly
+                  rows={6}
+                  dir="auto"
+                  value={"צור רשימת שירים כטקסט פשוט, ללא כותרת או הסברים. כל שורה תכיל שם אמן ושם שיר, מופרדים ברווח, מקף ורווח, כך:\nArcade Fire - The Suburbs\nFoo Fighters - Everlong\nודא ששמות האמנים והשירים מדויקים ואל תוסיף כפילויות.\nהבקשה שלי: [כתבו כאן אילו שירים או אמנים לכלול]"}
+                />
+              </div>
+
               {connected ? (
                 <button className="button button-primary full-button" type="submit" disabled={resolving || !file}>
                   {resolving ? <><span className="spinner" /> מחפשים התאמות...</> : "חיפוש שירים ב-Spotify"}
@@ -998,6 +1026,7 @@ export default function Home() {
                     value={playlistName}
                     onChange={(event) => setPlaylistName(event.target.value)}
                   />
+                  <small>השם מוצע לפי שם הקובץ ואפשר לשנות אותו.</small>
                 </label>
               )}
 
