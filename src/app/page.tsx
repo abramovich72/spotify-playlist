@@ -1033,7 +1033,7 @@ export default function Home() {
                 <textarea
                   id="song-file-prompt"
                   readOnly
-                  rows={16}
+                  rows={6}
                   dir="auto"
                   value={"צור רשימת שירים כטקסט פשוט, ללא כותרת או הסברים. כל שורה תכיל שם אמן ושם שיר, מופרדים ברווח, מקף ורווח, כך:\nArcade Fire - The Suburbs\nFoo Fighters - Everlong\nודא ששמות האמנים והשירים מדויקים ואל תוסיף כפילויות.\nהבקשה שלי: [כתבו כאן אילו שירים או אמנים לכלול]"}
                 />
